@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"nononsensecode.com/quiz/quiz"
@@ -18,44 +17,50 @@ func main() {
 	}
 	defer q.Close()
 
-	var questions []*quiz.Quiz
-	scanner := bufio.NewScanner(q)
-	for scanner.Scan() {
-		csv := strings.Split(scanner.Text(), ",")
-		qz, err := quiz.New(csv)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(2)
-		}
-		questions = append(questions, qz)
-	}
+	questions, totDuration := quiz.PopulateQuiz(q)
 
 	fmt.Println("Here are your questions:")
-	reader := bufio.NewReader(os.Stdin)
-	for i, qz := range questions {
-		qz.Present(i + 1)
-		for alive := true; alive; {
-			timer := time.NewTimer(qz.Timeout())
-			select {
-			case result := <-display(reader, qz):
-				fmt.Println(result)
-				timer.Stop()
-			case <-timer.C:
-				alive = false
-				fmt.Println("Time over. Over to next question...")
-			}
-		}
+
+	totTimer := time.NewTimer(totDuration)
+	report := make(chan string)
+	go askQuestions(questions, report)
+	select {
+	case <-totTimer.C:
+		fmt.Println("Quiz time is over")
+		fmt.Println(questions.Result())
+		return
+	case r := <-report:
+		fmt.Println(r)
+		return
 	}
 }
 
-func display(reader *bufio.Reader, qz *quiz.Quiz) chan string {
-	var s chan string
+func getAnswer(reader *bufio.Reader, a chan string) {
 	answer, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(3)
+		a <- "INVALID"
+		return
 	}
-	qz.ReadAnswer(answer)
-	s <- "Answered"
-	return s
+	a <- answer
+}
+
+func askQuestions(questions quiz.Questions, c chan string) {
+	reader := bufio.NewReader(os.Stdin)
+	answer := make(chan string)
+
+	for i, q := range questions {
+		q.Display(i + 1)
+		timer := time.NewTimer(q.Timeout())
+		go getAnswer(reader, answer)
+		select {
+		case <-timer.C:
+			fmt.Println("Answering timed out")
+			continue
+		case a := <-answer:
+			q.ReadAnswer(a)
+			timer.Stop()
+		}
+	}
+
+	c <- questions.Result()
 }

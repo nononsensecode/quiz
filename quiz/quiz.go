@@ -1,11 +1,59 @@
 package quiz
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+type Questions []*Quiz
+
+func (q Questions) Result() string {
+	total := len(q)
+	answered, right, wrong := 0, 0, 0
+	for _, qz := range q {
+		if qz.IsAnswerRight() {
+			right++
+		}
+		if qz.userAnswer > -1 {
+			answered++
+		}
+	}
+	wrong = total - right
+
+	return fmt.Sprintf("Out of %d questions, %d answered. %d were right, %d were wrong",
+		total, answered, right, wrong)
+}
+
+func PopulateQuiz(f *os.File) (questions Questions, tot time.Duration) {
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		csv := strings.Split(scanner.Text(), ",")
+		qz, err := newQuiz(csv)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(2)
+		}
+		questions = append(questions, qz)
+		tot += qz.Timeout()
+	}
+	tot = (tot * 80) / 100
+	return
+}
+
+func newQuiz(a []string) (q *Quiz, err error) {
+	q = new(Quiz)
+	err = q.Marshal(a)
+	if err != nil {
+		return
+	}
+	q.opts = opts{"A", "B", "C", "D"}
+	q.userAnswer = -1
+	return
+}
 
 type Quiz struct {
 	question   string
@@ -18,23 +66,13 @@ type Quiz struct {
 
 type opts []string
 
-func (o opts) IsExist(a string) int {
+func (o opts) doesExist(a string) int {
 	for i, opt := range o {
-		if opt == strings.ToUpper(a) {
+		if opt == strings.ToUpper(strings.TrimSpace(a)) {
 			return i
 		}
 	}
 	return -1
-}
-
-func New(a []string) (q *Quiz, err error) {
-	q = new(Quiz)
-	err = q.Marshal(a)
-	if err != nil {
-		return
-	}
-	q.opts = opts{"A", "B", "C", "D"}
-	return
 }
 
 func (q *Quiz) Marshal(a []string) (err error) {
@@ -61,7 +99,7 @@ func (q *Quiz) Marshal(a []string) (err error) {
 	return
 }
 
-func (q Quiz) Present(i int) {
+func (q Quiz) Display(i int) {
 	fmt.Printf("%d. %s ?\n", i, q.question)
 	for i, opt := range q.opts {
 		fmt.Printf("%s) %s \n", opt, q.options[i])
@@ -70,9 +108,13 @@ func (q Quiz) Present(i int) {
 }
 
 func (q *Quiz) ReadAnswer(a string) {
-	q.userAnswer = q.opts.IsExist(a)
+	q.userAnswer = q.opts.doesExist(a)
 }
 
 func (q Quiz) Timeout() time.Duration {
 	return q.timeLimit
+}
+
+func (q *Quiz) IsAnswerRight() bool {
+	return q.answer == q.userAnswer
 }
