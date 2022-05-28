@@ -10,18 +10,18 @@ import (
 )
 
 func main() {
-	q, err := os.OpenFile("quiz.csv", os.O_RDONLY, 0600)
+	csvFile, err := os.OpenFile("quiz.csv", os.O_RDONLY, 0600)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	defer q.Close()
+	defer csvFile.Close()
 
-	questions, totDuration := quiz.PopulateQuiz(q)
+	questions := quiz.PrepareQuestions(csvFile)
 
-	fmt.Println("Here are your questions:")
-
-	totTimer := time.NewTimer(totDuration)
+	totalTimeout := questions.TotalTimeout()
+	fmt.Printf("Here are your questions (All should be answered in %s): \n", totalTimeout)
+	totTimer := time.NewTimer(totalTimeout)
 	report := make(chan string)
 	go askQuestions(questions, report)
 	select {

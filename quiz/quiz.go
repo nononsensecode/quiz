@@ -28,19 +28,25 @@ func (q Questions) Result() string {
 		total, answered, right, wrong)
 }
 
-func PopulateQuiz(f *os.File) (questions Questions, tot time.Duration) {
+func (qs Questions) TotalTimeout() (tot time.Duration) {
+	for _, q := range qs {
+		tot += q.Timeout()
+	}
+	tot = (tot * 80) / 100
+	return
+}
+
+func PrepareQuestions(f *os.File) (questions Questions) {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		csv := strings.Split(scanner.Text(), ",")
-		qz, err := newQuiz(csv)
+		q, err := newQuiz(csv)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(2)
 		}
-		questions = append(questions, qz)
-		tot += qz.Timeout()
+		questions = append(questions, q)
 	}
-	tot = (tot * 80) / 100
 	return
 }
 
@@ -100,7 +106,7 @@ func (q *Quiz) Marshal(a []string) (err error) {
 }
 
 func (q Quiz) Display(i int) {
-	fmt.Printf("%d. %s ?\n", i, q.question)
+	fmt.Printf("%d. %s ? (%s to answer)\n", i, q.question, q.Timeout())
 	for i, opt := range q.opts {
 		fmt.Printf("%s) %s \n", opt, q.options[i])
 	}
